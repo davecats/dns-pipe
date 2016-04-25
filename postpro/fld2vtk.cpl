@@ -1,0 +1,231 @@
+USE fft
+USE rbmat
+USE ../parallel
+USE oldsymbolic
+!USE rtchecks
+
+INTEGER nfl,nfh
+IF COMMANDLINE.HI=0 THEN
+	ASK nfl,nfh
+ELSE
+	nfl=atoi(COMMANDLINE(1)); nfh=atoi(COMMANDLINE(2))
+END IF
+
+INTEGER CONSTANT nx,ny,nz
+REAL CONSTANT alpha0, htcoef, Re
+REAL meanpx=0, meanflowx=0, time=0, u_conv=0
+
+FILE data=OPEN("vfield"nfl".dat")
+READ BY NAME FROM data nx, ny, nz
+READ BY NAME FROM data alpha0, htcoef, Re
+READ BY NAME FROM data meanpx OR meanflowx
+READ BY NAME FROM data u_conv
+READ BY NAME FROM data time
+CLOSE data
+
+REAL y(0..ny)
+INTEGER iy0(-nz..nz)
+FILE field_file
+endofheader=1024
+
+field_file=OPEN("vfield"nfl".dat")
+POSITION field_file,endofheader
+READ BINARY FROM field_file y,iy0(0..nz)
+CLOSE field_file
+DO iy0(-m)=iy0(m) FOR m=1 TO nz
+
+INTEGER iproc=1,nproc=1
+datafile="vfield"nfl".dat"
+USE ../pipedata
+nsmp=1
+
+SUBROUTINE ByteSwap(POINTER TO SINGLE xxx)
+C SECTION
+  register char a;
+  register char * b = (char *) xxx_;
+  register int  i = 0;
+  register int  j = sizeof(*xxx_)-1;
+  while (i<j)
+    {
+     a = b[i];
+     b[i] = b[j];
+     b[j] = a;
+     i++, j--;
+     }
+END C SECTION
+END ByteSwap
+
+SHARED ARRAY(0..nx,-nz..nz,-1..1) OF VELOCITY V
+SHARED ARRAY(0..nxd-1,0..nzd(ny)-1,0..ny) OF VELOCITY Vd, Vdp
+
+SUBROUTINE read_slice(INTEGER iy,jy)
+    POSITION field_file,startpos(iy)
+    LOOP FOR ix=0 TO nx AND iz=-nz TO nz
+      IF iy>=iy0(iz) THEN READ BINARY FROM field_file V(ix,iz,jy) ELSE V(ix,iz,jy)=0
+    REPEAT
+END read_slice
+
+SUBROUTINE getreal_slice(INTEGER iy,jy)
+  PARALLEL LOOP FOR ismp=0 TO nsmp-1
+    LOOP FOR ix=ismp TO nx BY nsmp
+      DO Vd(ix,iz,iy)=V(ix,iz,jy) FOR iz=0 TO nz EXCEPT iy0(iz)>iy
+      DO Vd(ix,nzd(ny)+iz,iy)=V(ix,iz,jy) FOR iz=-nz TO -1 EXCEPT iy0(iz)>iy
+      WITH Vd(ix,0..nzd(ny)-1,iy): IFT(u); IFT(v); IFT(w)
+    REPEAT LOOP
+    SYNC(ismp,nsmp)
+    DO WITH Vd(*,iz,iy): RFT(u); RFT(v); RFT(w) FOR iz=ismp TO HI BY nsmp
+    SYNC(ismp,nsmp)
+  REPEAT LOOP
+END getreal_slice
+
+SUBROUTINE getreal_pert_slice(INTEGER iy,jy)
+  PARALLEL LOOP FOR ismp=0 TO nsmp-1
+    LOOP FOR ix=ismp TO nx BY nsmp
+      DO Vdp(ix,iz,iy)=V(ix,iz,jy) FOR iz=0 TO nz EXCEPT iy0(iz)>iy OR (ix=0 AND iz=0)
+      DO Vdp(ix,nzd(ny)+iz,iy)=V(ix,iz,jy) FOR iz=-nz TO -1 EXCEPT iy0(iz)>iy
+      WITH Vdp(ix,0..nzd(ny)-1,iy): IFT(u); IFT(v); IFT(w)
+    REPEAT LOOP
+    SYNC(ismp,nsmp)
+    DO WITH Vdp(*,iz,iy): RFT(u); RFT(v); RFT(w) FOR iz=ismp TO HI BY nsmp
+    SYNC(ismp,nsmp)
+  REPEAT LOOP
+END getreal_pert_slice
+
+GRADVVAR=STRUCTURED ARRAY(ux,uy,uz,vx,vy,vz,wx,wy,wz) OF COMPLEX
+SHARED ARRAY(0..nxd-1,0..nzd(ny)-1) OF GRADVVAR gradV
+REAL lambda2(0..2*nxd-1,0..nzd(ny)-1,0..ny)
+
+SUBROUTINE get_lambda2(INTEGER iy,jy; REAL d1(*))
+  COMPLEX lam1,lam2,lam3,Par1,Par2,Par3
+  REAL AA,BB,CC,DD,trace,A(0..2,0..2),B(0..2,0..2); gradV(*,*)=0
+
+  PARALLEL LOOP FOR ismp=0 TO nsmp-1
+    LOOP FOR ix=ismp TO nx BY nsmp
+      DO WITH gradV(ix,iz), V(ix,iz,*)
+        ux = I*alpha0*ix*u(jy); uy = (SUM d1(j)*u(jy+j) FOR j=-1 TO 1);               uz = I*iz/y(iy)*u(jy)
+        vx = I*alpha0*ix*v(jy); vy = (SUM d1(j)*v(jy+j) FOR j=-1 TO 1);               vz = I*iz/y(iy)*v(jy)
+        wx = I*alpha0*ix*w(jy); wy = (SUM d1(j)*w(jy+j) FOR j=-1 TO 1) - w(jy)/y(iy); wz = I*iz/y(iy)*w(jy) + v(jy)/y(iy)
+      FOR iz=0 TO nz EXCEPT iy0(iz)>iy OR (ix=0 AND iz=0)
+      DO WITH gradV(ix,nzd(ny)+iz), V(ix,iz,*)
+        ux = I*alpha0*ix*u(jy); uy = (SUM d1(j)*u(jy+j) FOR j=-1 TO 1);               uz = I*iz/y(iy)*u(jy)
+        vx = I*alpha0*ix*v(jy); vy = (SUM d1(j)*v(jy+j) FOR j=-1 TO 1);               vz = I*iz/y(iy)*v(jy)
+        wx = I*alpha0*ix*w(jy); wy = (SUM d1(j)*w(jy+j) FOR j=-1 TO 1) - w(jy)/y(iy); wz = I*iz/y(iy)*w(jy) + v(jy)/y(iy)
+      FOR iz=-nz TO -1 EXCEPT iy0(iz)>iy
+      WITH gradV(ix,0..nzd(ny)-1): IFT(ux); IFT(uy); IFT(uz); IFT(vx); IFT(vy); IFT(vz); IFT(wx); IFT(wy); IFT(wz)
+    REPEAT LOOP
+    SYNC(ismp,nsmp)
+    DO WITH gradV(*,iz): RFT(ux); RFT(uy); RFT(uz); RFT(vx); RFT(vy); RFT(vz); RFT(wx); RFT(wy); RFT(wz) FOR iz=ismp TO HI BY nsmp
+    SYNC(ismp,nsmp)
+  REPEAT LOOP
+  LOOP FOR ix=0 TO 2*nxd-1
+    LOOP FOR iz=0 TO nzd(ny)-1
+      A(0,0)=gradV(*,iz).ux.REALIFIED(ix); A(0,1)=gradV(*,iz).vx.REALIFIED(ix); A(0,2)=gradV(*,iz).wx.REALIFIED(ix)
+      A(1,0)=gradV(*,iz).uy.REALIFIED(ix); A(1,1)=gradV(*,iz).vy.REALIFIED(ix); A(1,2)=gradV(*,iz).wy.REALIFIED(ix)
+      A(2,0)=gradV(*,iz).uz.REALIFIED(ix); A(2,1)=gradV(*,iz).vz.REALIFIED(ix); A(2,2)=gradV(*,iz).wz.REALIFIED(ix)
+
+      DO B(i,j)=SUM A(i,k)*A(k,j) FOR ALL k FOR ALL i AND ALL j
+      DO A(i,j)=B(j,i)+B(i,j) FOR ALL i AND ALL j
+
+      trace = SUM A(k,k) FOR ALL k
+
+      AA=1
+      BB=-trace
+      CC= A(0,0)*A(1,1)+A(0,0)*A(2,2)+A(1,1)*A(2,2)-A(0,1)^2-A(0,2)^2-A(1,2)^2!aa*bb+aa*cc+bb*cc-dd^2-ee^2-ff^2
+      DD=-A(0,0)*A(1,1)*A(2,2)+A(2,2)*A(0,1)^2+A(1,1)*A(1,2)^2-2*A(0,1)*A(0,2)*A(1,2)+A(0,0)*A(1,2)^2!-aa*bb*cc+cc*dd^2+bb*ee^2-2*dd*ee*ff+aa*ff^2
+
+      Par1= -2*BB^3 + 9*BB*CC - 27*DD
+      Par2= (-BB^2*CC^2 + 4*CC^3 + 4*BB^3*DD - 18*BB*CC*DD + 27*DD^2)
+      Par2= 3^(3/2)*(Par2)^(1/2)
+      Par3= (-BB^2 + 3*CC)/(3*2^(2/3)*(Par1 + Par2)^(1/3))
+      lam1= -BB/3 - 2^(1/3)*(-BB^2 + 3*CC)/(3*(Par1 + Par2)^(1/3)) + (1/(3*2^(1/3)))*((Par1 + Par2)^(1/3))
+      lam2= -BB/3 + (1 + I*3^(1/2))*Par3 - (1/(6*2^(1/3)))*(1 - I*3^(1/2))*(Par1 + Par2)^(1/3)
+      lam3= trace - lam2 - lam1
+
+      lambda2(ix,iz,iy)=REAL(lam1)
+      IF MIN(REAL(lam1),REAL(lam3))<=REAL(lam2) AND REAL(lam2)<=MAX(REAL(lam1),REAL(lam3)) THEN
+        lambda2(ix,iz,iy) = REAL(lam2)
+	    END IF
+	    IF MIN(REAL(lam1),REAL(lam2))<=REAL(lam3) AND REAL(lam3)<=MAX(REAL(lam1),REAL(lam2)) THEN
+          lambda2(ix,iz,iy) = REAL(lam3)
+      END IF
+    REPEAT LOOP
+  REPEAT LOOP
+
+END get_lambda2
+
+SINGLE tmpx, tmpy, tmpz
+REAL v,w
+CONSTANT INTEGER s=2
+
+LOOP files FOR n=nfl TO nfh
+  V(*,*,*)=0; Vd(*,*,*)=0; Vdp(*,*,*)=0; lambda2(*,*,*)=0
+
+  WRITE "vfield"n".dat -> vfield"n".vtk"
+  field_file=OPEN("vfield"n".dat")
+
+  DO read_slice(iy,iy-1) FOR iy=1 TO MIN(2,ny)
+  LOOP FOR ALL ix AND iz=-nz TO nz EXCEPT 0<iy0(iz)
+    V(ix,iz,-1).u = -SUM dc(ABS(iz),1,j)*V(ix,iz,-1+j).u FOR j=1 TO 2
+    V(ix,iz,-1).v = -SUM dc(ABS(iz),2,j)*V(ix,iz,-1+j).v FOR j=1 TO 2
+    V(ix,iz,-1).w = -SUM dc(ABS(iz),3,j)*V(ix,iz,-1+j).w FOR j=1 TO 2
+  REPEAT
+  getreal_slice(0,-1); getreal_pert_slice(0,-1)
+
+  LOOP FOR iy=1 TO ny-1
+    DO V(*,*,j)=V(*,*,j+1) FOR j=-1 TO 0
+    read_slice(iy+1,1)
+    WITH derivatives(iy): getreal_slice(iy,0); getreal_pert_slice(iy,0); get_lambda2(iy,0,d1)
+  REPEAT
+  CLOSE field_file
+
+  getreal_slice(ny,1); getreal_pert_slice(ny,1)
+
+  outfile=OPEN("vfield"n".vtk")
+  WRITE TO outfile "# vtk DataFile Version 2.0"
+  WRITE TO outfile "DNS vector field"
+  WRITE TO outfile "BINARY"
+
+  WRITE TO outfile "DATASET STRUCTURED_GRID"
+  WRITE TO outfile "DIMENSIONS "2*(nxd DIV s)" "ny DIV s + 1" "nzd(ny) DIV s + 1
+  WRITE TO outfile "POINTS "2*(nxd DIV s)*(ny DIV s + 1)*(nzd(ny) DIV s + 1)" float"
+  LOOP FOR iz=0 TO nzd(ny) BY s AND iy=0 TO ny BY s AND ix=0 TO 2*nxd-1 BY s
+    tmpx=SINGLE(2*PI/alpha0*ix/(2*nxd))
+    tmpy=SINGLE(y(iy)*SIN(2*PI*iz/nzd(ny)))
+    tmpz=SINGLE(y(iy)*COS(2*PI*iz/nzd(ny)))
+    ByteSwap(^tmpx); ByteSwap(^tmpy); ByteSwap(^tmpz); WRITE BINARY TO outfile tmpx,tmpy,tmpz
+  REPEAT
+
+  WRITE TO outfile "POINT_DATA "2*(nxd DIV s)*(ny DIV s + 1)*(nzd(ny) DIV s + 1)
+  WRITE TO outfile "SCALARS lambda2 float 1"
+  WRITE TO outfile "LOOKUP_TABLE default"
+  LOOP FOR iz=0 TO nzd(ny) BY s AND iy=0 TO ny BY s AND ix=0 TO 2*nxd-1 BY s
+    tmpx=SINGLE(lambda2(ix,IF iz=nzd(ny) THEN 0 ELSE iz,iy))
+    ByteSwap(^tmpx); WRITE BINARY TO outfile tmpx
+  REPEAT
+
+  WRITE TO outfile "VECTORS velocity float"
+  LOOP FOR iz=0 TO nzd(ny) BY s AND iy=0 TO ny BY s AND ix=0 TO 2*nxd-1 BY s
+    tmpx=SINGLE(Vd(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).u.REALIFIED(ix))
+!    tmpy=SINGLE(Vd(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).v.REALIFIED(ix))
+!    tmpz=SINGLE(Vd(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).w.REALIFIED(ix))
+    v=Vd(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).v.REALIFIED(ix)
+    w=Vd(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).w.REALIFIED(ix)
+    tmpy=SINGLE(v*SIN(2*PI*iz/nzd(ny))+w*COS(2*PI*iz/nzd(ny)))
+    tmpz=SINGLE(v*COS(2*PI*iz/nzd(ny))-w*SIN(2*PI*iz/nzd(ny)))
+    ByteSwap(^tmpx); ByteSwap(^tmpy); ByteSwap(^tmpz); WRITE BINARY TO outfile tmpx,tmpy,tmpz
+  REPEAT
+
+  WRITE TO outfile "VECTORS velocity_pert float"
+  LOOP FOR iz=0 TO nzd(ny) BY s AND iy=0 TO ny BY s AND ix=0 TO 2*nxd-1 BY s
+    tmpx=SINGLE(Vdp(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).u.REALIFIED(ix))
+!    tmpy=SINGLE(Vdp(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).v.REALIFIED(ix))
+!    tmpz=SINGLE(Vdp(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).w.REALIFIED(ix))
+    v=Vdp(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).v.REALIFIED(ix)
+    w=Vdp(*,IF iz=nzd(ny) THEN 0 ELSE iz,iy).w.REALIFIED(ix)
+    tmpy=SINGLE(v*SIN(2*PI*iz/nzd(ny))+w*COS(2*PI*iz/nzd(ny)))
+    tmpz=SINGLE(v*COS(2*PI*iz/nzd(ny))-w*SIN(2*PI*iz/nzd(ny)))
+    ByteSwap(^tmpx); ByteSwap(^tmpy); ByteSwap(^tmpz); WRITE BINARY TO outfile tmpx,tmpy,tmpz
+  REPEAT
+  CLOSE outfile
+
+REPEAT files
