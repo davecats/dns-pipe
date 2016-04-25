@@ -1,0 +1,195 @@
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
+
+C SECTION
+#define SHMPAGE 4194304
+size_t shmavail=0;
+char *shmaddr;
+void *shmalloc(size_t size){
+  int shmid;
+  char *s;
+  if((size & 7)!=0)size=(size | 7)+1;
+  if(size>shmavail){
+    shmavail=((size-1)/SHMPAGE+1)*SHMPAGE;
+    shmid = shmget(IPC_PRIVATE, shmavail, (IPC_CREAT | 0600));
+    if(shmid<0)errmalloc();
+    shmaddr = shmat(shmid, NULL, 0);
+    shmctl(shmid, IPC_RMID, NULL);
+  };
+  shmavail-=size;
+  shmaddr=(s=shmaddr)+size;
+  return s;
+}
+
+void traphandler(char test){
+}
+
+sigset_t oldmask;
+void donothing(int signum){return;}
+void setup_signal_USR1(){
+/* Set up the mask of signals to temporarily block. */
+sigset_t mask;
+sigemptyset(&mask);
+sigaddset(&mask, SIGUSR1);
+sigprocmask(SIG_BLOCK, &mask, &oldmask);
+if(signal(SIGUSR1,donothing)!=SIG_DFL)fprintf(stderr,"SIGUSR1 already in use\n");
+setpgrp();
+}
+END C SECTION
+
+FRI SECTION
+trytype "SHARED"]= sep =[id -> type expr =[type expr C "S" *]=
+POINTER TO C "S" =[POINTER TO *]=
+sizeof C "S" =[sizeof *]= -> copy copy 1[const] *]=
+to C "S" =[to *]= -> *]=
+CPLdecl C "S" =[CPLdecl const POINTER TO *]= -> *]=
+Cdecl C "S" =[Cdecl POINTER TO *]= -> =[ *]=
+Cdecl POINTER TO C "S" =[Cdecl POINTER TO *]= -> =[ *]=
+Cdecl 1 C "S" * value =[ *]= cut =[sizeof 1 #2 -> =[ *]= =[newline #2 "=shmalloc(" #1 ");if(" #2 "==NULL)errmalloc();": =[startof #4 -> =[cleanup *]= -> 1[unless["0"]=] =[#3 "-=" *]= ^";"]
+! Cdecl 2 C "S" * value =[ *]= cut =[sizeof 1 #2 -> =[ *]= =[cleanup "shmdt((char*)" #2 "+": <startof #4> =[");"]= -> =[ *]=
+! Cdecl 1 C "S" * value =[ *]= =[sizeof #2 -> const INTEGER const value =[ *]= =[newline #2 "=mmap(NULL," #1 ",PROT_READ|PROT_WRITE,MAP_SHARED|MAP_ANON,-1,0);if(" #2 "==MAP_FAILED)errmalloc();": =[startof #4 -> =[cleanup *]= -> 1[unless["0"]=] =[#3 "-=" *]= ^";"]
+! Cdecl 1 C "S" cut =[Cdecl 1 *]= -> [ifnot["=malloc("] copy] cut "=malloc(" =["=mmap(NULL,"]= [--")" do asis] =[",PROT_READ|PROT_WRITE,MAP_SHARED|MAP_ANON,-1,0"]= * "==NULL" =["==MAP_FAILED"]= *]=
+Cdecl 2 C "S" * value =[ *]= cut =[sizeof 1 #2 -> =[] [1[mark =[#2 "->"]] copy]]= =["void " #2 "free(void * ptr)"] <makehdr makehdr> =[cleanup "{munmap((char*)ptr+": <startof #5> =["," #3 ");}"]= -> *]= ]>declblock =[#2 "free((void*)" #2 ");"
+! to vardeclaration *]= POINTER TO =[: #1 value =[POINTER TO value *]= -> value =[ *]=
+to vardeclaration *]= undeclared value =[CPLdecl const #1 value *]= -> =[ *]= =[Cdecl #2 value #1 -> =[ *]= ^";" do makehdr ]>declblock
+statement]= "PARALLEL" spaces "MODULE" noalpha spaces cut do validname =[#1 -> =[id -> expr =[: <to vardeclaration type "pid_t">]= \
+  openscope =["fflush(NULL);if((" #1 "=fork())==0){": <block> cut "END" spaces #2 closescope =["exit(0);}"]= =["};if(waitpid(" #2 ",NULL,0)<0){traphandler("\""waitpid"\"");" ]>blockend
+statement]= "PARALLEL" spaces "LOOP" noalpha spaces "FOR" noalpha openscope =[loop id =[loop "L"^*]=]->0 =[=[: fullsep <loop> ^]= @l \
+  =[: =[: cut =[: #l -> * ";"^";" * "(" =[ * "<=" =[: [--")" do asis] "){" =[: [--"}" do asis] "}" =[ *]= \
+  =["fflush(NULL);" #5 "(" #4 "<" #3 "&&fork()){" #2 "};{" newline] <block "4l"> closescope =["} if(" #5 "<" #4 ")exit(0);" #2 newline #6 "(" #5 "<" #4 "){if(wait(NULL)<0)traphandler("\""wait"\"");" #3 "}" #2 ]=
+statement]= "SLEEP" cut sep "UNTIL" sep =[expr -> BOOLEAN value =["while(!(" *]= =["))sigsuspend(&oldmask);"]=
+statement]= "WAKEUP" =["kill(0,SIGUSR1);"
+END FRI SECTION
+
+setup_signal_USR1()
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
+C SECTION
+int tcpserver(uint16_t port)
+{
+  int sock,newsock;
+  int optionvalue=1;
+  struct sockaddr_in servername;
+  /* Create the socket. */
+  sock = socket (PF_INET, SOCK_STREAM, 0);
+  if (sock < 0)
+  {
+    perror ("socket (server)");
+    exit (EXIT_FAILURE);
+  };
+  if(setsockopt(sock,SOL_SOCKET,SO_REUSEADDR,&optionvalue,sizeof(optionvalue))<0)
+  {
+    perror ("setsockopt (REUSE)");
+    exit (EXIT_FAILURE);
+  };
+  /* Give the socket a name. */
+  servername.sin_family = AF_INET;
+  servername.sin_port = htons (port);
+  servername.sin_addr.s_addr = htonl (INADDR_ANY);
+  if (bind (sock, (struct sockaddr *) &servername, sizeof (servername)) < 0)
+  {
+    perror ("bind");
+    exit (EXIT_FAILURE);
+  };
+  if (listen (sock, 1) < 0)
+  {
+    perror ("listen");
+    exit (EXIT_FAILURE);
+  };
+  while(-1==(newsock=accept (sock, NULL, NULL)));
+  close(sock);
+  if(setsockopt(newsock,IPPROTO_TCP,TCP_NODELAY,&optionvalue,sizeof(optionvalue))<0)
+  {
+    perror ("setsockopt (TCP_NODELAY)");
+    exit (EXIT_FAILURE);
+  };
+  return newsock;
+}
+
+int tcpclient(const char *hostname, uint16_t port)  
+{
+  int sock;
+  int optionvalue=1;
+  struct sockaddr_in servername;
+  struct hostent *hostinfo;
+  /* Create the socket. */
+  sock = socket (PF_INET, SOCK_STREAM, 0);
+  if (sock < 0)
+  {
+    perror ("socket (client)");
+    exit (EXIT_FAILURE);
+  };
+  /* Connect to the server. */
+  servername.sin_family = AF_INET;
+  servername.sin_port = htons (port);
+  hostinfo = gethostbyname (hostname);
+  if (hostinfo == NULL)
+  {
+    fprintf (stderr, "Unknown host %s.\n", hostname);
+    exit (EXIT_FAILURE);
+  };
+  servername.sin_addr = *(struct in_addr *) hostinfo->h_addr;
+  while (0 > connect (sock,(struct sockaddr *) &servername,sizeof (servername)))usleep(1000);
+  if(setsockopt(sock,IPPROTO_TCP,TCP_NODELAY,&optionvalue,sizeof(optionvalue))<0)
+  {
+    perror ("setsockopt (TCP_NODELAY)");
+    exit (EXIT_FAILURE);
+  };
+  return sock;
+}
+
+int udpsocket(uint16_t myport, const char *hostname, uint16_t hostport)  
+{
+  int sock;
+  struct sockaddr_in servername;
+  struct hostent *hostinfo;
+  /* Create the socket. */
+  sock = socket (PF_INET, SOCK_DGRAM, 0);
+  if (sock < 0)
+  {
+    perror ("socket (client)");
+    exit (EXIT_FAILURE);
+  };
+  /* Give the socket a name. */
+  servername.sin_family = AF_INET;
+  servername.sin_port = htons (myport);
+  servername.sin_addr.s_addr = htonl (INADDR_ANY);
+  if (bind (sock, (struct sockaddr *) &servername, sizeof (servername)) < 0)
+  {
+    perror ("bind");
+    exit (EXIT_FAILURE);
+  };
+  /* Connect to the server. */
+  servername.sin_family = AF_INET;
+  servername.sin_port = htons (hostport);
+  hostinfo = gethostbyname (hostname);
+  if (hostinfo == NULL)
+  {
+    fprintf (stderr, "Unknown host %s.\n", hostname);
+    exit (EXIT_FAILURE);
+  };
+  servername.sin_addr = *(struct in_addr *) hostinfo->h_addr;
+  if (0 > connect (sock,(struct sockaddr *) &servername,sizeof (servername)))
+  {
+    perror ("connect (client)");
+    exit (EXIT_FAILURE);
+  };
+  return sock;
+}
+END C SECTION
+
+INLINE FUNCTION TCPSERVER(INTEGER port)=fdopen(tcpserver(port),"r+")
+INLINE FUNCTION TCPCLIENT(STRING server; INTEGER port)=fdopen(tcpclient(server,port),"r+")
+INLINE FUNCTION TCPSERVER(INTEGER port; STRING mode)=fdopen(tcpserver(port),mode)
+INLINE FUNCTION TCPCLIENT(STRING server; INTEGER port; STRING mode)=fdopen(tcpclient(server,port),mode)
+
+SHARED volatile INTEGER barrier=0
+INLINE SUBROUTINE SYNC(INTEGER ismp,nsmp)
+  SLEEP UNTIL barrier=ismp
+  barrier=(ismp+1) MOD nsmp; WAKEUP
+  SLEEP UNTIL barrier<=ismp
+END SYNC

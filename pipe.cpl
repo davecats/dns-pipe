@@ -1,0 +1,13 @@
+!USE rtchecks
+USE primcylsync
+
+LOOP timeloop WHILE time < t_max-deltat/2
+
+  outstats()
+  time=~+deltat; substep=0
+
+  buildrhs(RK1_rai); linsolve(RK1_rai_coeff*deltat); computeflowrate()
+  buildrhs(RK2_rai); linsolve(RK2_rai_coeff*deltat); computeflowrate()
+  buildrhs(RK3_rai); linsolve(RK3_rai_coeff*deltat); computeflowrate()
+
+REPEAT timeloop

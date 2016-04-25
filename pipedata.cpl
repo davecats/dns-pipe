@@ -1,0 +1,57 @@
+VELOCITY=STRUCTURED ARRAY(u,v,w) OF COMPLEX
+
+INTEGER nxd=3*nx DIV 2 - 1; DO INC nxd UNTIL FFTfit(nxd)
+INTEGER nzd(0..ny)
+LOOP FOR ALL iy
+  nzd(iy)=nz+1; DO DEC nzd(iy) UNTIL nzd(iy)=0 OR iy>=iy0(nzd(iy))
+  nzd(iy)=3*~-1; DO INC nzd(iy) UNTIL FFTfit(nzd(iy))
+REPEAT LOOP
+
+REAL FUNCTION procfun(INTEGER iy)=nxd*nzd(iy)*(LOG(nxd)+LOG(nzd(iy)))
+REAL sliceproc(0..ny-1)=0; DO sliceproc(iy)=sliceproc(MAX(0,iy-1))+procfun(iy) FOR iy=LO TO HI
+sliceproc=sliceproc*nproc/(sliceproc(HI))
+INTEGER nyl=-1; DO INC nyl UNTIL sliceproc(MAX(nyl,0))>iproc-1 +1E-11
+INTEGER nyh=ny; DO DEC nyh UNTIL sliceproc(MIN(nyh,ny-1))<=iproc +1E-11
+
+STRUCTURE(REAL d0,d1,drd) derivatives(MAX(1,nyl-1)..MIN(ny-1,nyh+1),-1..1)
+ARRAY(0..nz,0..3,0..2) OF REAL dc
+REAL d10(-1..1), d1n(-1..1); ARRAY(0..nz,0..1,0..2) OF REAL dc2,dc4
+MODULE setup_derivatives
+  REAL M(0..2,0..2),t(0..2)
+  LOOP FOR iy=derivatives.LO TO derivatives.HI WITH derivatives(iy)
+    DO M(i,j)=(y(iy-1+j)-y(iy))^(2-i) FOR ALL i,j; LUdecomp M
+    d1(-1+(*))=M\(0.,1,0)
+    DO M(i,j)=D[(#1-y(iy))^(3-i)][y(iy-1+j)] FOR ALL i,j; LUdecomp M
+    DO t(i)=SUM d1(j)*(y(iy+j)-y(iy))^(3-i) FOR ALL j FOR ALL i
+    d0(-1+(*))=M\t
+    DO M(i,j)=(y(iy-1+j)-y(iy))^(2-i) FOR ALL i,j; LUdecomp M
+    t=0; DO t(i)=SUM d0(j)*D(#1*D[(#1-y(iy))^(2-i)])[y(iy+j)] FOR ALL j FOR i=0 TO 1
+    drd(-1+(*))=M\t
+  REPEAT
+  DO M(i,j)=(y(ny-2+j)-y(ny))**(2-i) FOR ALL i,j; LUdecomp M
+  d1n(-1+(*))=M\(0.,1,0)
+  DO M(i,j)=(y(0+j)-y(0))**(2-i) FOR ALL i,j; LUdecomp M
+  d10(-1+(*))=M\(0.,1,0)
+  LOOP FOR m=0 TO 1 AND iz=m TO dc2.HI
+
+    DO M(1+i,j)=y[j+iy0(iz)]^(iz-m+2*i) FOR i=0 TO 1 AND ALL j
+    M(0)=(1.,0,0)
+    LUdecomp M
+    dc4(iz,m,0+(*))=M\(1.,0,0)
+
+    dc2(iz,m,0)=1; dc2(iz,m,1)=-[y(iy0(m))/y(iy0(m)+1)]^(iz-m); dc2(iz,m,2)=0
+  REPEAT
+  dc2(0,1)=dc2(2,1); dc4(0,1)=dc4(2,1)
+  dc(*,0,*) = dc4(*,0,*); dc(*,1,*) = dc4(*,0,*)
+  dc(*,2,*) = dc4(*,1,*); dc(*,3,*) = dc4(*,1,*)
+END setup_derivatives
+
+ssize_t startpos(1..ny)
+MODULE setupstartpos
+  startpos(1)=endofheader+SIZEOF(y)+SIZEOF(iy0(0..nz))
+  INTEGER iz=1
+  LOOP FOR iy=1 TO ny-1
+    LOOP WHILE iz<nz AND iy>=iy0(iz+1): INC iz
+    startpos(iy+1)=startpos(iy)+SIZEOF[ARRAY(0..nx,-iz..iz) OF VELOCITY]
+  REPEAT
+END setupstartpos

@@ -1,0 +1,47 @@
+SUBROUTINE LUdecompStep(ARRAY(*,-(2*nvars-1)..2*nvars-1) OF REAL A^,Ap^)
+  IF NOT last THEN A(HI-nvars+1+(0..nvars-1))=Ap
+  REAL piv
+  LOOP FOR i=A.HI1-nvars DOWN TO A.LO1
+    LOOP FOR k=MIN(A.HI2,A.HI1-i) DOWN TO 1
+      POINTER INTO A(i,*+k),A(i+k,*) j=0
+      piv=A(i,j+k)
+      DO DEC j; A(i,j+k)=~-piv*A(i+k,j) FOR -A.LO2 TIMES
+    REPEAT LOOP
+    piv=1/A(i,0); A(i,0)=piv
+    LOOP FOR j INTO A(i,A.LO2..-1): A(i,j)=~*piv
+  REPEAT LOOP
+  IF NOT first THEN Ap=A(LO+(0..nvars-1))
+END LUdecompStep
+
+SUBROUTINE LeftLUDivStep1(ARRAY(*,-(2*nvars-1)..2*nvars-1) OF REAL A; ARRAY(*) OF REAL x^,xp^)
+  IF NOT last THEN
+    LOOP FOR i=x.HI DOWN TO x.HI-nvars+1
+      jmax=MIN(A.HI2,x.HI-i)
+      POINTER INTO A(i,*),x(i+*) j=jmax
+      REAL sum=x(i)
+      LOOP FOR jmax TIMES: sum=~-A(i,j)*x(i+j); DEC j
+      x(i+j)=sum*A(i,j)
+    REPEAT LOOP
+    DO x(HI-2*nvars+1+i)=~+xp(i) FOR i=0 TO 2*nvars-1
+  END IF
+  LOOP FOR i=x.HI-nvars DOWN TO x.LO+nvars
+    jmax=MIN(A.HI2,x.HI-i)
+    POINTER INTO A(i,*),x(i+*) j=jmax
+    REAL sum=x(i)
+    LOOP FOR jmax TIMES: sum=~-A(i,j)*x(i+j); DEC j
+    x(i+j)=sum*A(i,j)
+  REPEAT LOOP
+  IF NOT first THEN xp=x(LO+(0..2*nvars-1))
+END LeftLUDivStep1
+
+SUBROUTINE LeftLUDivStep2(ARRAY(*) OF REAL x^,xp^; ARRAY(*,-(2*nvars-1)..2*nvars-1) OF REAL A)
+  IF NOT first THEN x(LO+(0..2*nvars-1))=xp
+  LOOP FOR i=x.LO+(IF first THEN nvars ELSE 2*nvars) TO x.HI
+    jmin=MAX(A.LO2,A.LO1-i)
+    POINTER INTO A(i,*),x(i+*) j=jmin
+    REAL sum=0
+    LOOP FOR -jmin TIMES: sum=~+A(i,j)*x(i+j); INC j
+    x(i+j)=~-sum
+  REPEAT LOOP
+  IF NOT last THEN xp=x(HI-2*nvars+1+(0..2*nvars-1))
+END LeftLUDivStep2
