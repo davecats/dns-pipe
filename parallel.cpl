@@ -22,8 +22,8 @@ void *shmalloc(size_t size){
   return s;
 }
 
-void traphandler(char test){
-}
+//void traphandler(char test){
+//}
 
 sigset_t oldmask;
 void donothing(int signum){return;}

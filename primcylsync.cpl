@@ -1,6 +1,6 @@
 USE fft
 USE rbmat
-USE parallel
+USE ./parallel.cpl
 USE oldsymbolic
 !USE rtchecks
 input_file="cyl.in"

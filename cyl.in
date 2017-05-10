@@ -1,0 +1,9 @@
+nx=96	ny=120	nz=128
+alpha0=0.5
+htcoef = 1.2
+Re=3000
+meanflowx=0.
+u_conv=0.0
+deltat=0.002	t_max=500
+dt_field=0.05	time_from_restart=no
+restart_file=vfield.dat
