@@ -1,5 +1,11 @@
 function field = read_field_alternate(filename,dns,field,dc)
 
+%
+% This function reads the velocity field out of the field data produced by
+% pipe.cpl
+%
+
+% Open file
 f = fopen(filename);
 
 % Read data from file
@@ -18,7 +24,8 @@ for IY=1:dns.ny-1
     end
 end
 
-% 
+% Use continuity condition at the centerline of the pipe to compute the
+% velocity at index 1
 for IX=0:dns.nx
     ix=IX+1;
     for IZ=-field.nzN(1):field.nzN(1)
