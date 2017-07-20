@@ -37,27 +37,35 @@ end
 
 
 % Compute right hand side (RHS)
-% 
-% for iy=1+(1:dns.ny-1)
-%     tmpdUd=complex(zeros(3,3,field.nzd(iy),2*dns.nxd),0);
-%     tmpVd =complex(zeros(1,3,field.nzd(iy),2*dns.nxd),0);
-%     % Backward Fourier transform
-%     tmpVd=plane_ift(reshape(field.V{iy},[1,3,2*field.nzN(iy)+1,dns.nx+1]),tmpVd,[4,3]);
-%     tmpdUd=plane_ift(field.dU{iy},tmpdUd,[4,3]);
-%     %
-%     RHS = squeeze( -tmpdUd(2,2,:,:).^2 -(tmpdUd(3,3,:,:)/field.y(iy)).^2 -tmpdUd(1,1,:,:).^2 ...
-%                    -2*tmpdUd(2,3,:,:).*tmpdUd(3,2,:,:)/field.y(iy)                           ...
-%                    -2*tmpdUd(2,1,:,:).*tmpdUd(1,2,:,:)                                       ...
-%                    -2*tmpdUd(3,1,:,:).*tmpdUd(1,3,:,:)/field.y(iy)                           ...
-%                    -(tmpVd(1,2,:,:)/field.y(iy)).^2                                            ...
-%                    -2*tmpVd(1,2,:,:).*tmpdUd(3,3,:,:)/(field.y(iy)^2)                          ...
-%                    +2*tmpVd(1,3,:,:).*tmpdUd(3,2,:,:)/field.y(iy)                              );
-%  end
-% 
-% % Solve Neumann problem for mode (0,0)
-% dpdy = calcdpdy(0,0,dns,derivatives,field);
-% A = complex(zeros(dns.ny+1,dns.ny+1),0);
+for iy=1+(1:dns.ny-1)
+    tmpdUd=complex(zeros(3,3,field.nzd(iy),2*dns.nxd),0);
+    tmpVd =complex(zeros(1,3,field.nzd(iy),2*dns.nxd),0);
+    % Backward Fourier transform
+    tmpVd=plane_ift(reshape(field.V{iy},[1,3,2*field.nzN(iy)+1,dns.nx+1]),tmpVd);
+    tmpdUd=plane_ift(field.dU{iy},tmpdUd);
+    %
+    field.p{iy}(:,:)= plane_fft(-tmpdUd(2,2,:,:).^2 -(tmpdUd(3,3,:,:)/field.y(iy)).^2 -tmpdUd(1,1,:,:).^2 ...
+                                -2*tmpdUd(2,3,:,:).*tmpdUd(3,2,:,:)/field.y(iy)                           ...
+                                -2*tmpdUd(2,1,:,:).*tmpdUd(1,2,:,:)                                       ...
+                                -2*tmpdUd(3,1,:,:).*tmpdUd(1,3,:,:)/field.y(iy)                           ...
+                                -(tmpVd(1,2,:,:)/field.y(iy)).^2                                          ...
+                                -2*tmpVd(1,2,:,:).*tmpdUd(3,3,:,:)/(field.y(iy)^2)                        ...
+                                +2*tmpVd(1,3,:,:).*tmpdUd(3,2,:,:)/field.y(iy),                           ...
+                                reshape(field.p{iy}(:,:),[1,1,2*field.nzN(iy)+1,dns.nx+1]));                          
+end
 
+% Solve Neumann problem for mode (0,0)
+A = complex(zeros(dns.ny+1,dns.ny+1),0); tmpp=complex(zeros(dns.ny+1,1),0);
+% Regularity condition at the axis
+A(1,1:3) = dc(1,1,1:3); 
+% Drd operator 
+A(1+(1:dns.ny-1),:)=derivatives.drd{dns.nz+1}(1+(1:dns.ny-1),:)./repmat(field.y(1+(1:dns.ny-1)),1,dns.ny+1);
+% Neumann boundary condition at the wall
+A(end,end)=1; %A(dns.ny+1,:) = derivatives.d1{dns.nz+1}(dns.ny+1,:);  field.p{dns.ny+1}(dns.nz+1,1) = calcdpdy(0,0,dns,derivatives,field);
+% Finally solve
+for iy=1:dns.ny+1; tmpp(iy)=field.p{iy}(field.nzN(iy)+1,1); end
+tmpp=A\tmpp;
+for iy=1:dns.ny+1; field.p{iy}(field.nzN(iy)+1,1)=tmpp(iy); end
 
 
 % Solve Dirichlet problem for modes but (0,0)
@@ -66,10 +74,10 @@ end
 
 % Compute RHS of Poisson equation
 function dpdy = calcdpdy(IX,IZ,dns,derivatives,field)
-    dpdy=0; ix=IX+1; iz=field.nzN(end)+1+IZ;
+    dpdy=0; ix=IX+1; iz=field.nzN(end)+1+IZ; 
     for i=-1:1
       j=dns.ny+i;
-      pn = pn -(1/Re/field.y(end))*(derivatives.drd(dns.ny+1,j)*field.V{j}(2,iz,ix));
+      dpdy = dpdy -(1/dns.Re/field.y(end))*(derivatives.drd{dns.nz+IZ+1}(dns.ny+1,j)*field.V{j}(2,iz,ix));
     end
 end
 

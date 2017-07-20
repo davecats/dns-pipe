@@ -35,12 +35,12 @@ end
 % velocity at index 1
 for IX=0:dns.nx
     ix=IX+1;
-    for IZ=-field.nzN(1):field.nzN(1)
-            field.V{1}(1:3,IZ+field.nzN(1)+1,ix)=complex(0,0);
+    for IZ=-field.nzN(1):field.nzN(1); iz=IZ+field.nzN(1)+1;
+            field.V{1}(1:3,iz,ix)=complex(0,0);
             for i=2:3
-              field.V{1}(1,IZ+field.nzN(1)+1,ix) = field.V{1}(1,IZ+field.nzN(1)+1,ix) - dc(abs(IZ)+1,2,i).*field.V{i}(1,IZ+field.nzN(i)+1,ix);
-              field.V{1}(2,IZ+field.nzN(1)+1,ix) = field.V{1}(2,IZ+field.nzN(1)+1,ix) - dc(abs(IZ)+1,3,i).*field.V{i}(2,IZ+field.nzN(i)+1,ix);
-              field.V{1}(3,IZ+field.nzN(1)+1,ix) = field.V{1}(3,IZ+field.nzN(1)+1,ix) - dc(abs(IZ)+1,4,i).*field.V{i}(3,IZ+field.nzN(i)+1,ix);
+              field.V{1}(1,iz,ix) = field.V{1}(1,iz,ix) - dc(abs(IZ)+1,2,i).*field.V{i}(1,iz,ix);
+              field.V{1}(2,iz,ix) = field.V{1}(2,iz,ix) - dc(abs(IZ)+1,3,i).*field.V{i}(2,iz,ix);
+              field.V{1}(3,iz,ix) = field.V{1}(3,iz,ix) - dc(abs(IZ)+1,4,i).*field.V{i}(3,iz,ix);
             end
     end
 end

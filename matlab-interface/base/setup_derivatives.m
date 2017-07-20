@@ -5,7 +5,7 @@ for IZ=0:dns.nz; iz=dns.nz+1+IZ;
     derivatives.d0{iz}=zeros(dns.ny-field.iy0(iz)+1,dns.ny-field.iy0(iz)+1);
 end
 derivatives.d1=derivatives.d0; derivatives.drd=derivatives.d0;
-dc=zeros(dns.nz+1,4,3); dc2=zeros(dns.nz+1,3,3); dc4=dc2;
+dc=zeros(dns.nz+1,4,3); dc4=dc;
 
 for IZ=0:dns.nz; iz=dns.nz+1+IZ;
     for iY=field.iy0(iz)+1:dns.ny-1
@@ -48,13 +48,14 @@ end
 
 % regularity conditions
 for m=0:1 
-    for iz=m:dns.nz
-      for i=0:1; for j=0:2; M(i+2,j+1)=field.y(j+field.iy0(iz+dns.nz+1)+1)^(iz-m+2*i); end; end
-      t=t*0; t(1)=1; M(1,:)=[1;0;0]; dc4(iz+1,m+1,1:3)=M\t; 
-      dc2(iz+1,m+1,1)=1; dc2(iz+1,m+1,2)=-(field.y(field.iy0(m+1)+1)/field.y(field.iy0(m+1)+1+1))^(iz-m); dc2(iz+1,m+1,3)=0;
+    for IZ=m:dns.nz; iz=IZ+1;
+      for i=0:1; for j=0:2; M(i+2,j+1)=field.y(j+field.iy0(iz+dns.nz)+1)^(IZ-m+2*i); end; end
+      t=t*0; t(1)=1; M(1,:)=[1;0;0]; dc4(iz,m+1,1:3)=M\t; 
+      %dc2(iz+1,m+1,1)=1; dc2(iz+1,m+1,2)=-(field.y(field.iy0(m+1)+1)/field.y(field.iy0(m+1)+1+1))^(iz-m); dc2(iz+1,m+1,3)=0;
     end
 end
-dc2(1,2,:)=dc2(3,2,:); dc4(1,2,:)=dc4(3,2,:);
+%dc2(1,2,:)=dc2(3,2,:); dc4(1,2,:)=dc4(3,2,:);
+dc4(1,2)=dc4(3,2);
 dc(:,1,:)=dc4(:,1,:);  dc(:,2,:)=dc4(:,1,:);
 dc(:,3,:)=dc4(:,2,:);  dc(:,4,:)=dc4(:,2,:);
 
