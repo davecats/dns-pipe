@@ -42,7 +42,7 @@ addpath('./base/');
 setup_derivatives
 [field] = read_field_alternate('vfield.dat',dns,field,dc);
 
-%% Compute velocity gradient
+%% Compute velocity gradient and pressure
 [field] = poisson(dns, field, derivatives, dc);
 
 %% Fourier transorm the pipe data to space
