@@ -16,7 +16,7 @@ for IZ=0:dns.nz; iz=dns.nz+1+IZ;
         t=t*0; t(2)=1; derivatives.d1{iz}(jy,jy-1:jy+1)=(M\t)';
         % d0
         for i=0:2; for j=0:2; M(i+1,j+1)=(3-i)*(field.y(iy-1+j)-field.y(iy))^(2-i); end; end
-        t=t*0; for i=0:2; for j=-1:1; t(i+1)=t(i+1)+derivatives.d1{iz}(jy,jy+j)*(field.y(iy+j)-field.y(iy))^(3-i); end; end; derivatives.d0{iz}(jy,jy-1:jy+1)=(M\t)';
+        t=t*0; for i=0:2; for j=-1:1; t(i+1)=t(i+1)+derivatives.d1{iz}(jy,jy+j)*(field.y(iy+j)-field.y(iy))^(3-i); end; end; derivatives.d0{iz}(jy,jy-1:jy+1)=(M\t)'; 
         % drd
         for i=0:2; for j=0:2; M(i+1,j+1)=(field.y(iy-1+j)-field.y(iy))^(2-i); end; end
         t=t*0; 
@@ -31,8 +31,8 @@ for IZ=0:dns.nz; iz=dns.nz+1+IZ;
     iY=field.iy0(iz); jy=iY-field.iy0(iz)+1;
     for i=0:2; for j=0:2; M(i+1,j+1)=(field.y(iY+j+1)-field.y(iY+1))^(2-i); end; end
     t=t*0; t(2)=1; derivatives.d1{iz}(jy,jy:jy+2)=M\t; derivatives.d0{iz}(jy,jy)=1;
-    derivatives.drd{iz}(jy,jy:jy+2)=derivatives.d1{iz}(jy,jy:jy+2);
-
+    t=t*0; t(2)=1; t(1)=2*field.y(iy); derivatives.drd{iz}(jy,jy:jy+2)=M\t; 
+    
     % wall
     iY=dns.ny; iy=iY+1; jy=iY-field.iy0(iz)+1;
     for i=0:2; for j=0:2; M(i+1,j+1)=(field.y(dns.ny-1+j)-field.y(dns.ny+1))^(2-i); end; end
@@ -40,7 +40,7 @@ for IZ=0:dns.nz; iz=dns.nz+1+IZ;
     for i=0:2; for j=0:2; M(i+1,j+1)=(field.y(dns.ny-1+j)-field.y(dns.ny+1))^(2-i); end; end
     t=t*0; t(2)=1; t(1)=2*field.y(iy); derivatives.drd{iz}(jy,jy-2:jy)=M\t; 
 end
-for m=1:dns.nz; 
+for m=1:dns.nz
     derivatives.d0{dns.nz+1-m}=derivatives.d0{dns.nz+1+m}; 
     derivatives.d1{dns.nz+1-m}=derivatives.d1{dns.nz+1+m};
     derivatives.drd{dns.nz+1-m}=derivatives.drd{dns.nz+1+m};
