@@ -1,5 +1,3 @@
-M=zeros(3,3); t=zeros(3,1);
-
 derivatives.d0=cell(2*dns.nz+1,1);
 for IZ=0:dns.nz; iz=dns.nz+1+IZ;
     derivatives.d0{iz}=zeros(dns.ny-field.iy0(iz)+1,dns.ny-field.iy0(iz)+1);
@@ -8,6 +6,7 @@ derivatives.d1=derivatives.d0; derivatives.drd=derivatives.d0;
 dc=zeros(dns.nz+1,4,3); dc4=dc;
 
 for IZ=0:dns.nz; iz=dns.nz+1+IZ;
+    M=zeros(3,3); t=zeros(3,1);
     for iY=field.iy0(iz)+1:dns.ny-1
         % define helping indices
         iy=iY+1; jy=iY-field.iy0(iz)+1;
@@ -25,20 +24,23 @@ for IZ=0:dns.nz; iz=dns.nz+1+IZ;
                 if i<1; t(i+1)=t(i+1)+derivatives.d0{iz}(jy,jy+j)*(field.y(iy+j)*(2-i)*(1-i)*(field.y(iy+j)-field.y(iy))^(-i)); end
                 t(i+1)=t(i+1)+derivatives.d0{iz}(jy,jy+j)*( (2-i)*(field.y(iy+j)-field.y(iy))^(1-i) ); 
             end 
-        end; derivatives.drd{iz}(jy,jy-1:jy+1)=(M\t)';
+        end; derivatives.drd{iz}(jy,jy-1:jy+1)=(M\t);
     end
     % position at which a mode iz appears
-    iY=field.iy0(iz); jy=iY-field.iy0(iz)+1;
-    for i=0:2; for j=0:2; M(i+1,j+1)=(field.y(iY+j+1)-field.y(iY+1))^(2-i); end; end
-    t=t*0; t(2)=1; derivatives.d1{iz}(jy,jy:jy+2)=M\t; derivatives.d0{iz}(jy,jy)=1;
-    t=t*0; t(2)=1; t(1)=2*field.y(iy); derivatives.drd{iz}(jy,jy:jy+2)=M\t; 
+    M=zeros(5,5); t=zeros(5,1);
+    iY=field.iy0(iz); iy=iY+1; jy=iy-field.iy0(iz);
+    for i=0:4; for j=0:4; M(i+1,j+1)=(field.y(iy+j)-field.y(iy))^(4-i); end; end
+    t=t*0; t(4)=1; derivatives.d1{iz}(jy,jy:jy+4)=M\t; derivatives.d0{iz}(jy,jy)=1;
+    for i=0:4; for j=0:4; M(i+1,j+1)=(field.y(iy+j)-field.y(iy))^(4-i); end; end
+    t=t*0; t(4)=1; t(3)=2*field.y(iy); derivatives.drd{iz}(jy,jy:jy+4)=M\t; 
+    
     
     % wall
     iY=dns.ny; iy=iY+1; jy=iY-field.iy0(iz)+1;
-    for i=0:2; for j=0:2; M(i+1,j+1)=(field.y(dns.ny-1+j)-field.y(dns.ny+1))^(2-i); end; end
-    t=t*0; t(2)=1; derivatives.d1{iz}(jy,jy-2:jy)=M\t; derivatives.d0{iz}(jy,jy)=1;
-    for i=0:2; for j=0:2; M(i+1,j+1)=(field.y(dns.ny-1+j)-field.y(dns.ny+1))^(2-i); end; end
-    t=t*0; t(2)=1; t(1)=2*field.y(iy); derivatives.drd{iz}(jy,jy-2:jy)=M\t; 
+    for i=0:4; for j=0:4; M(i+1,j+1)=(field.y(dns.ny-3+j)-field.y(dns.ny+1))^(4-i); end; end
+    t=t*0; t(4)=1; derivatives.d1{iz}(jy,jy-4:jy)=M\t; derivatives.d0{iz}(jy,jy)=1;
+    for i=0:4; for j=0:4; M(i+1,j+1)=(field.y(dns.ny-3+j)-field.y(dns.ny+1))^(4-i); end; end
+    t=t*0; t(4)=1; t(3)=2*field.y(iy); derivatives.drd{iz}(jy,jy-4:jy)=M\t; 
 end
 for m=1:dns.nz
     derivatives.d0{dns.nz+1-m}=derivatives.d0{dns.nz+1+m}; 
@@ -46,6 +48,7 @@ for m=1:dns.nz
     derivatives.drd{dns.nz+1-m}=derivatives.drd{dns.nz+1+m};
 end
 
+M=zeros(3,3); t=zeros(3,1);
 % regularity conditions
 for m=0:1 
     for IZ=m:dns.nz; iz=IZ+1;
@@ -59,5 +62,5 @@ dc4(1,2)=dc4(3,2);
 dc(:,1,:)=dc4(:,1,:);  dc(:,2,:)=dc4(:,1,:);
 dc(:,3,:)=dc4(:,2,:);  dc(:,4,:)=dc4(:,2,:);
 
-% Hallo
+clear M t
 
