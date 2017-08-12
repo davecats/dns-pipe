@@ -59,14 +59,14 @@ for IZ=-dns.nz:dns.nz; iz=dns.nz+1+IZ;
         % 2nd derivative in x
         A=B-kx2;
         % Regularity condition
-        A(1,1:2) = A(1,1:2) - (derivatives.drd{iz}(2,1)./y(1) -kz2(1)-kx2)*reshape(dc(abs(IZ)+1,1,2:3),[1,2]);
+        A(1,1:2) = A(1,1:2) - (derivatives.drd{iz}(2,1)./y(1,1) -kz2(1,1) -kx2)*reshape(dc(abs(IZ)+1,1,2:3),[1,2]);
         % Dirichlet boundary condition at the wall
-        tmpp(:,ix) = tmpp(end,ix)-(derivatives.drd{iz}(end-1,end)./y(end) -kz2(end)-kx2)*field.p{dns.ny+1}(iz,ix);
+        tmpp(end,ix) = tmpp(end,ix)-(derivatives.drd{iz}(end-1,end)./y(end,end)-kz2(end,end)-kx2)*field.p{dns.ny+1}(iz,ix);
         % Finally solve
         tmpp(:,ix)=A\tmpp(:,ix);
     end
     % Recover pressure with regularity
-    field.p{iy0+1}(field.nzN(iy0+1)+IZ+1,idx+1)=-dc(abs(IZ)+1,1,2)*tmpp(2,idx+1)-dc(abs(IZ)+1,1,3)*tmpp(3,idx+1);
+    field.p{iy0+1}(field.nzN(iy0+1)+IZ+1,idx+1)=-dc(abs(IZ)+1,1,2)*tmpp(1,idx+1)-dc(abs(IZ)+1,1,3)*tmpp(2,idx+1);
     % Copy field.p <- tmpp
     for IY=iy0+1:dns.ny-1; iy=IY+1; jz=field.nzN(iy)+IZ+1; field.p{iy}(jz,idx+1)=tmpp(IY-iy0,idx+1); end
 end
@@ -74,8 +74,8 @@ end
 end
 
 function pn = calcpn(IX,IZ,dns,derivatives,field)
-    pn=0; ix=IX+1; iz=field.nzN(end)+1+IZ; k2=-IZ*IZ-(IX*dns.alfa0)^2;
-    for i=-1:1; j=dns.ny+i;
-      pn = pn -(1/dns.Re/k2)*(derivatives.drd{iz}(end,end+i-1)*1j*(IZ*field.V{j}(3,iz,ix) + IX*dns.alfa0*field.V{j}(1,iz,ix)));
+    pn=0; ix=IX+1; iz=dns.nz+1+IZ; k2=IZ*IZ+(IX*dns.alfa0)^2; n=numel(derivatives.drd{iz}(end,:));
+    for i=0:n-1; j=dns.ny-(n-2)+i; jz=field.nzN(j)+1+IZ;
+      pn = pn -(1/dns.Re/k2)*(derivatives.drd{iz}(end,end-(n-1)+i)*1j*(IZ*field.V{j}(3,jz,ix) + IX*dns.alfa0*field.V{j}(1,jz,ix)));
     end
 end
