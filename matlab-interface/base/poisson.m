@@ -46,7 +46,7 @@ for iy=1:dns.ny+1; field.p{iy}(field.nzN(iy)+1,1)=tmpp(iy); end
 for IZ=-dns.nz:dns.nz; iz=dns.nz+1+IZ;
     iy0=field.iy0(iz); s=dns.ny-iy0+1; y=repmat(field.y(1+(iy0+1:dns.ny-1)),1,s-2); kz2=IZ*IZ./y.^2;
     B=zeros(s-2,s-2);  tmpp=complex(zeros(s-2,dns.nx+1),0);
-    B(:,:)=derivatives.drd{iz}(2:s-1,2:s-1)./y -kz2;
+    B(:,:)=derivatives.drd{iz}(2:s-1,2:s-1)./y -derivatives.d0{iz}(2:s-1,2:s-1).*kz2;
     idx=(double(IZ==0):dns.nx);
     % Copy field.p -> tmpp
     for IY=iy0+1:dns.ny-1; iy=IY+1; jz=field.nzN(iy)+IZ+1; tmpp(IY-iy0,idx+1)=field.p{iy}(jz,idx+1); end
@@ -57,11 +57,11 @@ for IZ=-dns.nz:dns.nz; iz=dns.nz+1+IZ;
         % calcpn
         field.p{dns.ny+1}(iz,ix) = calcpn(IX,IZ,dns,derivatives,field);
         % 2nd derivative in x
-        A=B-kx2;
+        A=B-derivatives.d0{iz}(2:s-1,2:s-1).*kx2;
         % Regularity condition
-        A(1,1:2) = A(1,1:2) - (derivatives.drd{iz}(2,1)./y(1,1) -kz2(1,1) -kx2)*reshape(dc(abs(IZ)+1,1,2:3),[1,2]);
+        A(1,1:2) = A(1,1:2) - (derivatives.drd{iz}(2,1)./y(1,1) -derivatives.d0{iz}(2,1)*(kz2(1,1) +kx2))*reshape(dc(abs(IZ)+1,1,2:3),[1,2]);
         % Dirichlet boundary condition at the wall
-        tmpp(end,ix) = tmpp(end,ix)-(derivatives.drd{iz}(end-1,end)./y(end,end)-kz2(end,end)-kx2)*field.p{dns.ny+1}(iz,ix);
+        tmpp(end,ix) = tmpp(end,ix)-(derivatives.drd{iz}(end-1,end)./y(end,end)-derivatives.d0{iz}(end-1,end)*(kz2(end,end)+kx2))*field.p{dns.ny+1}(iz,ix);
         % Finally solve
         tmpp(:,ix)=A\tmpp(:,ix);
     end
@@ -74,8 +74,8 @@ end
 end
 
 function pn = calcpn(IX,IZ,dns,derivatives,field)
-    pn=0; ix=IX+1; iz=dns.nz+1+IZ; k2=IZ*IZ+(IX*dns.alfa0)^2; n=numel(derivatives.drd{iz}(end,:));
+    pn=0; ix=IX+1; iz=dns.nz+1+IZ; k2=IZ*IZ/field.y(end)+(IX*dns.alfa0)^2; n=numel(derivatives.drd{iz}(end,:));
     for i=0:n-1; j=dns.ny-(n-2)+i; jz=field.nzN(j)+1+IZ;
-      pn = pn -(1/dns.Re/k2)*(derivatives.drd{iz}(end,end-(n-1)+i)*1j*(IZ*field.V{j}(3,jz,ix) + IX*dns.alfa0*field.V{j}(1,jz,ix)));
+      pn = pn -(1/(dns.Re*k2*field.y(end)))*(derivatives.drd{iz}(end,end-(n-1)+i)*(1j*IZ*field.V{j}(3,jz,ix) + 1j*IX*dns.alfa0*field.V{j}(1,jz,ix)));
     end
 end

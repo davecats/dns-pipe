@@ -27,12 +27,13 @@ for IZ=0:dns.nz; iz=dns.nz+1+IZ;
         end; derivatives.drd{iz}(jy,jy-1:jy+1)=(M\t);
     end
     % position at which a mode iz appears
-    M=zeros(5,5); t=zeros(5,1);
+    s=((dns.ny-field.iy0(iz)+1)>=5)*2+3; S=s-1;
+    M=zeros(s,s); t=zeros(s,1);
     iY=field.iy0(iz); iy=iY+1; jy=iy-field.iy0(iz);
-    for i=0:4; for j=0:4; M(i+1,j+1)=(field.y(iy+j)-field.y(iy))^(4-i); end; end
-    t=t*0; t(4)=1; derivatives.d1{iz}(jy,jy:jy+4)=M\t; derivatives.d0{iz}(jy,jy)=1;
-    for i=0:4; for j=0:4; M(i+1,j+1)=(field.y(iy+j)-field.y(iy))^(4-i); end; end
-    t=t*0; t(4)=1; t(3)=2*field.y(iy); derivatives.drd{iz}(jy,jy:jy+4)=M\t; 
+    for i=0:S; for j=0:S; M(i+1,j+1)=(field.y(iy+j)-field.y(iy))^(S-i); end; end
+    t=t*0; t(S)=1; derivatives.d1{iz}(jy,jy:jy+S)=M\t; derivatives.d0{iz}(jy,jy)=1;
+    for i=0:S; for j=0:S; M(i+1,j+1)=(field.y(iy+j)-field.y(iy))^(S-i); end; end
+    t=t*0; t(S)=1; t(S-1)=2*field.y(iy); derivatives.drd{iz}(jy,jy:jy+S)=M\t; 
     
     
     % wall
