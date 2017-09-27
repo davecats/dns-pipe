@@ -37,13 +37,13 @@ size_t=numel(iF_start:iF_space:iF_end);
 
 %% Read field header, set up coordinates and read initial field
 %  -------------------------------------------------------------------
-iF=iF_start;
-filename = strcat(filepath,filenamelist{iF});
+filename = strcat(filepath,filenamelist{iF_start});
 [dns,field] = read_header(filename);
 tic
 setup_derivatives
 disp(['setup_derivatives took ',num2str(toc)]);
 
+%% Load fields, calculate vorticity, save it as vtk
 for iF=iF_start:iF_space:iF_end
     disp(['read field  ',filenamelist{iF}]);
     filename = strcat([filepath,filenamelist{iF}]);

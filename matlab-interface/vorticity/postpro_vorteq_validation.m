@@ -1,5 +1,4 @@
 %% This programm validates if the vorticity transport equation is fullfilled
-
 % Start measure of time
 tic
 %% Clear Command Window and Workspace
@@ -8,11 +7,11 @@ clc
 clear variables
 %% Add subforlder ./base/ into MATLAB search paths
 %  -------------------------------------------------------------------
-addpath('./base/');
-
+addpath('./../base/');
+addpath('./../plot/');
 %% Check which timestep
 %use this exemplary timestep for the validation. can be varied
-t_valid=3400;
+t_valid=1500;
 
 %% Read field header, set up coordinates and read initial field
 %  -------------------------------------------------------------------
@@ -21,7 +20,7 @@ filepath=['../../../DATA/',filepath_short]
 filenamelist=dir([filepath,'/vfield*.dat']);
 filenamelist= sort_nat({filenamelist.name}.');
 filename = strcat(filepath,filenamelist{t_valid});
-[dns,fiel d] = read_header(filename);
+[dns,field] = read_header(filename);
 setup_derivatives
 disp(['setup_derivatives took ',num2str(toc)]);
 % [field] = poisson(dns, field, derivatives, dc);
@@ -75,14 +74,11 @@ for iF=t_valid
     tic
     [field] = vorticitytransport(dns, field, derivatives, dc)
 end
-
-
 %% Calculate the residuum
 restVorteq=cell(dns.ny+1,1);
 for iy=1+(0:dns.ny)
     restVorteq{iy}=field.y(iy)^2*dOmegadt{iy}-squeeze(field.CV{iy})-squeeze(field.DIF{iy})-squeeze(field.SR{iy});
 end
-
 
 % Plot the results
 addpath('./../plot/');
