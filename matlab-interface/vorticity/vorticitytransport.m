@@ -6,7 +6,7 @@ function   [field] = vorticitytransport(dns, field, derivatives, dc)
 %field.DIF: viscous diffusion
 %the signs are set that all terms are on the right hand side of the
 %equation
-% all terms are multiplied by to avoid singularities
+% all terms are multiplied by r^2 to avoid singularities
 %% Needed spatial derivatives
 [field] = velocity_gradient(dns, field, derivatives, dc)
 [field] = vorticity(dns, field, derivatives, dc)
