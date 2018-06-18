@@ -42,38 +42,28 @@ addpath('./base/');
 setup_derivatives
 [field] = read_field_alternate('vfield.dat',dns,field,dc);
 
+%% Compute velocity gradient and pressure
+[field] = poisson(dns, field, derivatives, dc);
+
 %% Fourier transorm the pipe data to space
 %  -------------------------------------------------------------------
 field.Vr=cell(dns.ny+1,1);  % declare cell array for velocity in physical space
 for IY=0:dns.ny
     iy=IY+1; field.Vr{iy}=complex(zeros(3,field.nzd(iy),2*dns.nxd),0);  % for every iy in the cell array declare matrix of velocity (3 velocity components, azimultal mode, axial mode)
-    % Swap the two half of the vector from (-n..n) --> (0..n, -n..-1) and
-    % accounting for the fact that Vr has an extended number of mode
-    field.Vr{iy}(:,end+(-field.nzN(iy):-1)+1,(0:dns.nx)+1) = field.V{iy}(:,(-field.nzN(iy):-1)+field.nzN(iy)+1,:);
-    field.Vr{iy}(:,1+(0:field.nzN(iy)),(0:dns.nx)+1) = field.V{iy}(:,(0:field.nzN(iy))+field.nzN(iy)+1,:);
-    % Backward Fourier transform
-    for iV=1:3 % ...for all velocity components
-        % 1D transform in the azimutal direction
-        for ix=1:2*dns.nxd;     field.Vr{iy}(iV,:,ix) = ifft(squeeze(field.Vr{iy}(iV,:,ix))); end  
-        % reconstruct missing coefficients in x direction which were not
-        % saved due to simmetry
-        field.Vr{iy}(iV,:,end+(-dns.nx:-1)+1) = conj(field.Vr{iy}(iV,:,(dns.nx:-1:1)+1));
-        % 1D transform in the axial direction
-        for iz=1:field.nzd(iy); field.Vr{iy}(iV,iz,:) = ifft(squeeze(field.Vr{iy}(iV,iz,:)))*(2*field.nzd(iy)*dns.nxd); end
-    end
+    field.Vr{iy} = plane_ift(field.V{iy},field.Vr{iy});
 end
 
-% Plot one (r,x) slice of vertical velocity
-for iy=1:dns.ny+1; for ix=1:2*dns.nxd
-        Vz(iy,ix)=mean(field.Vr{iy}(1,10,ix)); 
-        Vr(iy,ix)=mean(field.Vr{iy}(2,10,ix));
-        Vtheta(iy,ix)=mean(field.Vr{iy}(3,10,ix));
-end; end
-contourf(linspace(0,2*pi/dns.alfa0,2*dns.nxd), field.y, real(Vtheta))
-hold on; quiver(linspace(0,2*pi/dns.alfa0,2*dns.nxd),field.y,real(Vz),real(Vr),'k')
-xlabel('z')
-ylabel('r')
-axis equal
+% % Plot one (r,x) slice of vertical velocity
+% for iy=1:dns.ny+1; for ix=1:2*dns.nxd
+%         Vz(iy,ix)=field.Vr{iy}(1,10,ix); 
+%         Vr(iy,ix)=field.Vr{iy}(2,10,ix);
+%         Vtheta(iy,ix)=field.Vr{iy}(3,10,ix);
+% end; end
+% contourf(linspace(0,2*pi/dns.alfa0,2*dns.nxd), field.y, real(Vtheta))
+% hold on; quiver(linspace(0,2*pi/dns.alfa0,2*dns.nxd),field.y,real(Vz),real(Vr),'k')
+% xlabel('z')
+% ylabel('r')
+% axis equal
 
 
 toc
