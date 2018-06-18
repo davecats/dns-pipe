@@ -45,6 +45,17 @@ for iy=1:dns.ny-1
     field.startpos(iy+1)=field.startpos(iy)+3*8*2*(dns.nx+1)*(2*iz+1);
 end
 
+% Define positions in the file from which to read correct pressure
+field.startpos_p=zeros(dns.ny,1,'uint64');
+field.startpos_p(1)=1024+numel(field.y)*8+(dns.nz+1)*4;
+iz=1;
+for iy=1:dns.ny-1
+    while iz<dns.nz && iy>=field.iy0(dns.nz+1+iz+1); iz=iz+1; end
+    field.startpos_p(iy+1)=field.startpos_p(iy)+8*2*(dns.nx+1)*(2*iz+1);
+end
+
+
+
 % Count the variable number of Fourier modes in nz that we have
 % and declare variables
 field.V=cell(dns.ny+1,1); field.nzN=zeros(dns.ny+1,1);
