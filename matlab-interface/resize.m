@@ -30,19 +30,22 @@ addpath('./base/');
 [old.dns,old.field] = read_header(old.filename);
 [old.der,old.dc]=setup_derivatives(old.dns,old.field,3);
 [old.field] = read_field_alternate(old.filename,old.dns,old.field,old.dc);
-% 
-% %1d spektrum x
-% old.psdx =zeros(old.dns.nx+1,old.dns.ny+1);
-% old.psdz =zeros(2*old.dns.nz+1,old.dns.ny+1);
-% for iy=1:old.dns.ny+1
-%     old.psdx(:,iy)=2*sum(abs(old.field.V{iy}(1,:,:)),2); old.psdx(:,iy)=old.psdx(:,iy)/max(old.psdx(:,iy));
-%     n=(numel(old.field.V{iy}(1,:,1))-1)/2; N=2*old.dns.nz+1;
-%     old.psdz((N-1)/2+1+(-n:n),iy)=sum(squeeze(abs(old.field.V{iy}(1,:,[1:end 2:end]))),2); old.psdz(:,iy)=old.psdz(:,iy)/max(old.psdz(:,iy));
-% end
 
 %% Set up coordinates for the new field
 %  -------------------------------------------------------------------
 [new.dns,new.field] = setup_field(new.dns);
+
+%1d spektrum x
+old.psdx =zeros(old.dns.nx+1,old.dns.ny+1);
+old.psdz =zeros(2*old.dns.nz+1,old.dns.ny+1);
+for iy=1:old.dns.ny+1
+    old.psdx(:,iy)=2*sum(abs(old.field.V{iy}(1,:,:)),2); old.psdx(:,iy)=old.psdx(:,iy)/max(old.psdx(:,iy));
+    n=(numel(old.field.V{iy}(1,:,1))-1)/2; N=2*old.dns.nz+1;
+    old.psdz((N-1)/2+1+(-n:n),iy)=sum(squeeze(abs(old.field.V{iy}(1,:,[1:end 2:end]))),2); old.psdz(:,iy)=old.psdz(:,iy)/max(old.psdz(:,iy));
+end
+figure(); contour(old.field.y,(-old.dns.nz:old.dns.nz),log(old.psdz),[-10 -7 -5 -3],'ShowText','on'); hold on; plot(old.field.y,old.field.nzN+1,'k--','Linewidth',2); plot(old.field.y,new.field.nzN+1,'r--','Linewidth',2); xlabel('r/R'); ylabel('nz(r)'); ylim([0 old.dns.nz]); 
+figure(); contour(old.field.y,(0:old.dns.nx),log(old.psdx),[-10 -7 -5 -3],'ShowText','on'); hold on;  plot(old.field.y,new.dns.nx*ones(size(old.field.y)),'k','Linewidth',2); ylim([0 old.dns.nx]); xlabel('r/R'); ylabel('nx(r)');
+
 
 %% Resize
 %  -------------------------------------------------------------------
@@ -86,7 +89,7 @@ fwrite(f,new.field.y,'double'); fwrite(f,new.field.iy0(new.dns.nz+1:end),'int32'
 for IY=1:new.dns.ny; iy=IY+1;
     fseek(f,new.field.startpos(IY),'bof');
     buf=zeros(2,3,new.field.nzN(iy)*2+1,new.dns.nx+1);
-    buf(1,:,:,:)=real(new.field.V{iy}(1:3,:,:)); buf(2,:,:,:)=imag(real(new.field.V{iy}(1:3,:,:)));
+    buf(1,:,:,:)=real(new.field.V{iy}(1:3,:,:)); buf(2,:,:,:)=imag(new.field.V{iy}(1:3,:,:));
     fwrite(f,buf,'double');
 end
 fclose(f);
@@ -94,63 +97,4 @@ fclose(f);
 % Stop measure of time
 toc
 
-%% 
-function  [dns,field] = setup_field(dns)
 
-% Compute extended number of modes
-dns.nxd=3*dns.nx/2; while ~fftfit(dns.nxd); dns.nxd=dns.nxd+1; end   
-dns.nzd=3*dns.nz;   while ~fftfit(dns.nzd); dns.nzd=dns.nzd+1; end
-
-% y-coordinate
-field.y=(dns.ymin +(dns.ymax-dns.ymin)*tanh(dns.htcoef*(0:dns.ny)/dns.ny)/tanh(dns.htcoef))';
-
-% index (radius) iy0 at which the mode iz starts to appear
-field.iy0=zeros(2*dns.nz+1,1,'int32');
-for IZ=0:dns.nz; iz=dns.nz+1+IZ;
-    field.iy0(iz)=0; while field.y(field.iy0(iz)+3+1)*(dns.nz-0.5) < (IZ-1)*dns.ymax; field.iy0(iz)=field.iy0(iz)+1; end
-end
-for m=1:dns.nz; field.iy0(dns.nz+1-m)=field.iy0(dns.nz+1+m); end
-
-% Define positions in the file from which to read correct velocities
-field.startpos=zeros(dns.ny,1,'uint64');
-field.startpos(1)=1024+numel(field.y)*8+(dns.nz+1)*4;
-iz=1;
-for iy=1:dns.ny-1
-    while iz<dns.nz && iy>=field.iy0(dns.nz+1+iz+1); iz=iz+1; end
-    field.startpos(iy+1)=field.startpos(iy)+3*8*2*(dns.nx+1)*(2*iz+1);
-end
-
-% Define positions in the file from which to read correct pressure
-field.startpos_p=zeros(dns.ny,1,'uint64');
-field.startpos_p(1)=1024+numel(field.y)*8+(dns.nz+1)*4;
-iz=1;
-for iy=1:dns.ny-1
-    while iz<dns.nz && iy>=field.iy0(dns.nz+1+iz+1); iz=iz+1; end
-    field.startpos_p(iy+1)=field.startpos_p(iy)+8*2*(dns.nx+1)*(2*iz+1);
-end
-
-% Count the variable number of Fourier modes in nz that we have
-% and declare variables
-field.V=cell(dns.ny+1,1); field.nzN=zeros(dns.ny+1,1);
-for IY=0:dns.ny
-    iy=IY+1; IZ=0;
-    while IZ<=dns.nz && IY>=field.iy0(IZ+dns.nz+1); IZ=IZ+1; end
-    field.nzN(iy)=IZ-1;
-    field.V{iy}=complex(zeros(3,2*field.nzN(iy)+1,dns.nx+1),0);
-end
-
-% Define nzd(iy)
-field.nzd = zeros(dns.ny+1,1);
-for IY=0:dns.ny
-    iy=IY+1;
-    field.nzd(iy)=dns.nz; 
-    while field.nzd(iy)~=0 && IY<field.iy0(dns.nz+1+field.nzd(iy)); field.nzd(iy)=field.nzd(iy)-1; end
-    field.nzd(iy)=3*field.nzd(iy);
-    while ~fftfit(field.nzd(iy)); field.nzd(iy)=field.nzd(iy)+1; end
-end
-
-% Constant number of points in radial direction
-%for IY=0:dns.ny
-%    iy=IY+1; field.nzd(iy)=field.nzd(end);
-%end
-end
